@@ -1,6 +1,12 @@
-### J5 and J6 are end-effector rotation and cutting actions during experiments set to zero
-ACT_STATE_DIM = 4
+from pathlib import Path
+
+
+PACKAGE_DIR = Path(__file__).resolve().parent
+DEFAULT_DATASET_DIR = PACKAGE_DIR / "datasets"
+DEFAULT_CKPT_DIR = PACKAGE_DIR / "checkpoints"
+
 JOINT_NAMES = ("J1", "J2", "J3", "J4")
+ACT_STATE_DIM = len(JOINT_NAMES)
 
 JOINT_LIMITS = {
     "J1": (0.0015, 1.0),
@@ -10,8 +16,9 @@ JOINT_LIMITS = {
 }
 
 DEFAULT_JOINT_TARGET = {
-    "J1": 0.00,
+    "J1": 0.0015,
     "J2": 0.00,
-    "J3": 0.00,
+    "J3": 1.00,
     "J4": 0.00
 }
+
