@@ -15,9 +15,9 @@ import cv2
 import h5py
 import numpy as np
 
-from scara_act.camera import RealSenseSource
-from scara_act.constants import JOINT_NAMES
-from scara_act.tcs_client import TCSReadClient
+from camera import RealSenseSource
+from constants import JOINT_NAMES
+from tcs_client import TCSReadClient
 
 
 class QposPoller:
@@ -52,10 +52,7 @@ class QposPoller:
                 with self.condition:
                     self.samples.append((sample_time, qpos))
 
-                    while (
-                        self.samples
-                        and self.samples[0][0] < sample_time - 3.0
-                    ):
+                    while self.samples and self.samples[0][0] < sample_time - 3.0:
                         self.samples.popleft()
 
                     self.condition.notify_all()
@@ -97,10 +94,7 @@ class QposPoller:
         alpha = (image_time - time_before) / window
         qpos = qpos_before + alpha * (qpos_after - qpos_before)
 
-        nearest_offset = min(
-            image_time - time_before,
-            time_after - image_time,
-        )
+        nearest_offset = min(image_time - time_before, time_after - image_time)
 
         return qpos, nearest_offset, window
 
@@ -125,11 +119,7 @@ class RawKeyboard:
         return sys.stdin.read(1).lower() if ready else None
 
     def __exit__(self, *_):
-        termios.tcsetattr(
-            self.fd,
-            termios.TCSADRAIN,
-            self.old_settings,
-        )
+        termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
 
 
 def empty_episode(camera_names):
@@ -148,13 +138,13 @@ def empty_episode(camera_names):
 def add_sample(episode, camera_sample, synced):
     qpos, offset, window = synced
 
-    for name, image in camera_sample.frames.items():
+    for name, image in camera_sample["frames"].items():
         episode["images"][name].append(image.copy())
 
     episode["qpos"].append(qpos.astype(np.float32))
-    episode["image_time"].append(camera_sample.image_time)
-    episode["rs_timestamp_ms"].append(camera_sample.rs_timestamp_ms)
-    episode["frame_number"].append(camera_sample.frame_number)
+    episode["image_time"].append(camera_sample["image_time"])
+    episode["rs_timestamp_ms"].append(camera_sample["rs_timestamp_ms"])
+    episode["frame_number"].append(camera_sample["frame_number"])
     episode["qpos_offset"].append(offset)
     episode["qpos_window"].append(window)
 
@@ -173,7 +163,7 @@ def next_episode_path(dataset_dir):
     return dataset_dir / f"episode_{number:04d}.hdf5"
 
 
-def save_episode(episode, dataset_dir, requested_fps):
+def save_episode(episode, dataset_dir):
     path = next_episode_path(dataset_dir)
 
     qpos = np.asarray(episode["qpos"], dtype=np.float32)
@@ -182,25 +172,14 @@ def save_episode(episode, dataset_dir, requested_fps):
 
     action = np.concatenate([qpos[1:], qpos[-1:]])
 
-    qvel = np.zeros_like(qpos)
-    for joint in range(qpos.shape[1]):
-        qvel[:, joint] = np.gradient(qpos[:, joint], image_time)
-
     frame_steps = np.diff(frame_number)
     dropped = int(np.maximum(frame_steps - 1, 0).sum())
     duration = image_time[-1] - image_time[0]
     actual_fps = (len(qpos) - 1) / duration
 
     with h5py.File(path, "w") as root:
-        root.attrs["sim"] = False
-        root.attrs["requested_fps"] = requested_fps
-        root.attrs["actual_fps"] = actual_fps
-        root.attrs["dropped_frames"] = dropped
-        root.attrs["sync_skips"] = episode["sync_skips"]
-
         observations = root.create_group("observations")
         observations.create_dataset("qpos", data=qpos)
-        observations.create_dataset("qvel", data=qvel)
 
         images_group = observations.create_group("images")
         for name, images in episode["images"].items():
@@ -211,19 +190,10 @@ def save_episode(episode, dataset_dir, requested_fps):
 
         timestamps = root.create_group("timestamps")
         timestamps.create_dataset("image_time", data=image_time)
-        timestamps.create_dataset(
-            "rs_timestamp_ms",
-            data=episode["rs_timestamp_ms"],
-        )
+        timestamps.create_dataset("rs_timestamp_ms", data=episode["rs_timestamp_ms"])
         timestamps.create_dataset("frame_number", data=frame_number)
-        timestamps.create_dataset(
-            "qpos_offset",
-            data=episode["qpos_offset"],
-        )
-        timestamps.create_dataset(
-            "qpos_window",
-            data=episode["qpos_window"],
-        )
+        timestamps.create_dataset("qpos_offset", data=episode["qpos_offset"])
+        timestamps.create_dataset("qpos_window", data=episode["qpos_window"])
 
     print(
         f"Saved {path.name}: {len(qpos)} samples, "
@@ -235,14 +205,13 @@ def save_episode(episode, dataset_dir, requested_fps):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset-dir", type=Path, required=True)
+    parser.add_argument("--dataset-dir", type=Path, default=Path("datasets/default"))
     parser.add_argument("--host", default="192.168.0.10")
     parser.add_argument("--port", type=int, default=10100)
     parser.add_argument("--camera-name", default="wrist_d405")
     parser.add_argument("--serial", default="130322273198")
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--stream-size", type=int, nargs=2, default=(640, 480),)
-    parser.add_argument("--image-size", type=int, nargs=2, default=(640, 480),)
+    parser.add_argument("--size", type=int, nargs=2, default=(640, 480))
     parser.add_argument("--depth", action="store_true")
     parser.add_argument("--align-depth", action="store_true")
     parser.add_argument("--preview", action="store_true")
@@ -264,21 +233,12 @@ def main():
         camera_names.append(depth_name)
 
     camera = RealSenseSource(
-        color_name=args.camera_name,
-        depth_name=depth_name,
-        stream_size=tuple(args.stream_size),
-        image_size=tuple(args.image_size),
-        fps=args.fps,
-        serial=args.serial,
+        color_name=args.camera_name, depth_name=depth_name,
+        size=tuple(args.size), fps=args.fps, serial=args.serial,
         align_depth=args.align_depth,
     ).start()
 
-    robot = TCSReadClient(
-        host=args.host,
-        port=args.port,
-        timeout=5.0,
-        verbose=False,
-    )
+    robot = TCSReadClient(host=args.host, port=args.port, timeout=5.0, verbose=False)
 
     poller = QposPoller(robot).start()
     episode = None
@@ -295,7 +255,7 @@ def main():
                 sample = camera.read()
 
                 if preview_enabled:
-                    image = sample.frames[args.camera_name]
+                    image = sample["frames"][args.camera_name]
                     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
                     text = "IDLE"
@@ -316,9 +276,7 @@ def main():
 
                 if episode is not None:
                     synced = poller.get_qpos(
-                        sample.image_time,
-                        args.sync_timeout,
-                        args.max_qpos_window,
+                        sample["image_time"], args.sync_timeout, args.max_qpos_window
                     )
 
                     if synced is None:
@@ -339,11 +297,7 @@ def main():
                     elif len(episode["qpos"]) < 2:
                         print("Too few samples")
                     else:
-                        save_episode(
-                            episode,
-                            args.dataset_dir,
-                            args.fps,
-                        )
+                        save_episode(episode, args.dataset_dir)
                         episode = None
 
                 elif key == "c":
