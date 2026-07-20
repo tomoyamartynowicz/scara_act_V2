@@ -24,8 +24,8 @@ DEFAULT_JOINT_TARGET = {
 
 TASK_CONFIGS = {
     "scara_default": {
-        "dataset_dir": str(DEFAULT_DATASET_DIR / "default"),
-        "num_episodes": 2,
+        "dataset_dir": str(DEFAULT_DATASET_DIR / "leaf_cutting_experiment_rgb_640x480"),
+        "num_episodes": 306,
         "camera_names": ["wrist_d405"],
     },
 }

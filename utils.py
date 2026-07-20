@@ -13,7 +13,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
-        self.norm_stats = norm_stats,
+        self.norm_stats = norm_stats
         self.chunk_size = chunk_size
 
     def __len__(self):
@@ -25,7 +25,6 @@ class EpisodicDataset(torch.utils.data.Dataset):
         episode_id = self.episode_ids[index]
         dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
-            is_sim = root.attrs['sim']
             original_action_shape = root['/action'].shape
             episode_len = original_action_shape[0]
             start_ts = np.random.choice(episode_len)
