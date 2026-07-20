@@ -8,14 +8,13 @@ import IPython
 e = IPython.embed
 
 class EpisodicDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, chunk_size):
         super(EpisodicDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
-        self.norm_stats = norm_stats
-        self.is_sim = None
-        self.__getitem__(0) # initialize self.is_sim
+        self.norm_stats = norm_stats,
+        self.chunk_size = chunk_size
 
     def __len__(self):
         return len(self.episode_ids)
@@ -29,29 +28,22 @@ class EpisodicDataset(torch.utils.data.Dataset):
             is_sim = root.attrs['sim']
             original_action_shape = root['/action'].shape
             episode_len = original_action_shape[0]
-            if sample_full_episode:
-                start_ts = 0
-            else:
-                start_ts = np.random.choice(episode_len)
+            start_ts = np.random.choice(episode_len)
             # get observation at start_ts only
             qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
                 image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
             # get all actions after and including start_ts
-            if is_sim:
-                action = root['/action'][start_ts:]
-                action_len = episode_len - start_ts
-            else:
-                action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
-                action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+            action = root["/action"][start_ts:start_ts + self.chunk_size]
+        
+        action_len = action.shape[0]
 
-        self.is_sim = is_sim
-        padded_action = np.zeros(original_action_shape, dtype=np.float32)
+        padded_action = np.zeros((self.chunk_size, *original_action_shape[1:]), dtype=np.float32, )
         padded_action[:action_len] = action
-        is_pad = np.zeros(episode_len)
-        is_pad[action_len:] = 1
+
+        is_pad = np.ones(self.chunk_size, dtype=bool)
+        is_pad[:action_len] = False
 
         # new axis for different cameras
         all_cam_images = []
@@ -83,22 +75,20 @@ def get_norm_stats(dataset_dir, num_episodes):
         dataset_path = os.path.join(dataset_dir, f'episode_{episode_idx}.hdf5')
         with h5py.File(dataset_path, 'r') as root:
             qpos = root['/observations/qpos'][()]
-            qvel = root['/observations/qvel'][()]
             action = root['/action'][()]
         all_qpos_data.append(torch.from_numpy(qpos))
         all_action_data.append(torch.from_numpy(action))
-    all_qpos_data = torch.stack(all_qpos_data)
-    all_action_data = torch.stack(all_action_data)
-    all_action_data = all_action_data
+    all_qpos_data = torch.cat(all_qpos_data, dim=0)
+    all_action_data = torch.cat(all_action_data, dim=0)
 
     # normalize action data
-    action_mean = all_action_data.mean(dim=[0, 1], keepdim=True)
-    action_std = all_action_data.std(dim=[0, 1], keepdim=True)
+    action_mean = all_action_data.mean(dim=0)
+    action_std = all_action_data.std(dim=0)
     action_std = torch.clip(action_std, 1e-2, np.inf) # clipping
 
     # normalize qpos data
-    qpos_mean = all_qpos_data.mean(dim=[0, 1], keepdim=True)
-    qpos_std = all_qpos_data.std(dim=[0, 1], keepdim=True)
+    qpos_mean = all_qpos_data.mean(dim=0)
+    qpos_std = all_qpos_data.std(dim=0)
     qpos_std = torch.clip(qpos_std, 1e-2, np.inf) # clipping
 
     stats = {"action_mean": action_mean.numpy().squeeze(), "action_std": action_std.numpy().squeeze(),
@@ -108,7 +98,7 @@ def get_norm_stats(dataset_dir, num_episodes):
     return stats
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, chunk_size):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -120,51 +110,13 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
 
     # construct dataset and dataloader
-    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = EpisodicDataset(train_indices, dataset_dir, camera_names, norm_stats, chunk_size)
+    val_dataset = EpisodicDataset(val_indices, dataset_dir, camera_names, norm_stats, chunk_size)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
 
-    return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
+    return train_dataloader, val_dataloader, norm_stats
 
-
-### env utils
-
-def sample_box_pose():
-    x_range = [0.0, 0.2]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    cube_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    cube_quat = np.array([1, 0, 0, 0])
-    return np.concatenate([cube_position, cube_quat])
-
-def sample_insertion_pose():
-    # Peg
-    x_range = [0.1, 0.2]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    peg_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    peg_quat = np.array([1, 0, 0, 0])
-    peg_pose = np.concatenate([peg_position, peg_quat])
-
-    # Socket
-    x_range = [-0.2, -0.1]
-    y_range = [0.4, 0.6]
-    z_range = [0.05, 0.05]
-
-    ranges = np.vstack([x_range, y_range, z_range])
-    socket_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
-    socket_quat = np.array([1, 0, 0, 0])
-    socket_pose = np.concatenate([socket_position, socket_quat])
-
-    return peg_pose, socket_pose
 
 ### helper functions
 

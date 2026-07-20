@@ -160,7 +160,7 @@ def next_episode_path(dataset_dir):
             pass
 
     number = max(numbers, default=-1) + 1
-    return dataset_dir / f"episode_{number:04d}.hdf5"
+    return dataset_dir / f"episode_{number}.hdf5"
 
 
 def save_episode(episode, dataset_dir):

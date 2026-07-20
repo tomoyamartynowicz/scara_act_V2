@@ -22,3 +22,11 @@ DEFAULT_JOINT_TARGET = {
     "J4": 0.00
 }
 
+TASK_CONFIGS = {
+    "scara_default": {
+        "dataset_dir": str(DEFAULT_DATASET_DIR / "default"),
+        "num_episodes": 2,
+        "camera_names": ["wrist_d405"],
+    },
+}
+
