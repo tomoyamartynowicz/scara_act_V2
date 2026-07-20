@@ -104,7 +104,7 @@ class RealSenseSource:
         # Gebruik dezelfde hostklok als de qpos-poller.
         wait_start = time.monotonic()
         frameset = self._wait_for_frames()
-        wait_end = time.monotonic()
+        wait_end = time.monotonic() 
 
         color_frame = frameset.get_color_frame()
         if not color_frame:

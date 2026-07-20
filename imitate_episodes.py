@@ -8,8 +8,6 @@ from copy import deepcopy
 from tqdm import tqdm
 from einops import rearrange
 
-from constants import DT
-from constants import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # data functions
 from utils import sample_box_pose, sample_insertion_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
@@ -280,7 +278,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
             plt.close()
         if real_robot:
-            move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
+            # move_grippers([env.puppet_bot_left, env.puppet_bot_right], [PUPPET_GRIPPER_JOINT_OPEN] * 2, move_time=0.5)  # open
             pass
 
         rewards = np.array(rewards)
