@@ -262,15 +262,7 @@ def main():
                     if episode is not None:
                         text = f"REC {len(episode['qpos'])}"
 
-                    cv2.putText(
-                        image,
-                        text,
-                        (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2,
-                    )
+                    cv2.putText(image, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2,)
                     cv2.imshow("Dataset recorder", image)
                     cv2.waitKey(1)
 
