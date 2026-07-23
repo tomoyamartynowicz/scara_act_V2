@@ -8,6 +8,7 @@ import torch
 from tqdm import tqdm
 
 import imitate_episodes as original
+from constants import DEFAULT_CKPT_DIR, TASK_CONFIGS
 
 
 def detach_cpu(values):
@@ -80,9 +81,9 @@ def train_bc(train_dataloader, val_dataloader, config, resume):
 
         with torch.inference_mode():
             policy.eval()
-            epoch_dicts = [detach_cpu(original.forward_pass(data, policy)) for data in val_dataloader]
+            epoch_dicts = [original.forward_pass(data, policy) for data in val_dataloader]
             validation_summary = original.compute_dict_mean(epoch_dicts)
-            validation_history.append(validation_summary)
+            validation_history.append(detach_cpu(validation_summary))
             val_loss = validation_summary['loss'].item()
             if val_loss < min_val_loss:
                 min_val_loss = val_loss
@@ -99,9 +100,8 @@ def train_bc(train_dataloader, val_dataloader, config, resume):
             forward_dict['loss'].backward()
             optimizer.step()
             optimizer.zero_grad()
-            detached = detach_cpu(forward_dict)
-            train_history.append(detached)
-            epoch_dicts.append(detached)
+            train_history.append(detach_cpu(forward_dict))
+            epoch_dicts.append(original.detach_dict(forward_dict))
         train_summary = original.compute_dict_mean(epoch_dicts)
         print(f"Train loss: {train_summary['loss'].item():.5f}")
         print(''.join(f'{key}: {value.item():.3f} ' for key, value in train_summary.items()))
@@ -124,14 +124,12 @@ def train_bc(train_dataloader, val_dataloader, config, resume):
 
         if epoch % 100 == 0:
             torch.save(policy.state_dict(), os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt'))
-            original.plot_history(train_history, validation_history, epoch + 1, ckpt_dir, seed)
-            original.plt.close('all')
+            original.plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
 
     torch.save(policy.state_dict(), os.path.join(ckpt_dir, 'policy_last.ckpt'))
     best_state_dict = torch.load(best_path, map_location='cpu', weights_only=True)
     torch.save(best_state_dict, os.path.join(ckpt_dir, f'policy_epoch_{best_epoch}_seed_{seed}.ckpt'))
     original.plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed)
-    original.plt.close('all')
     print(f'Training finished:\nSeed {seed}, val loss {min_val_loss:.6f} at epoch {best_epoch}')
     return best_epoch, min_val_loss, best_state_dict
 
@@ -140,6 +138,10 @@ def main(args):
     resume = args.pop('resume')
     if '--resume' in sys.argv:
         sys.argv.remove('--resume')
+    if args['ckpt_dir'] is None:
+        dataset_dir = TASK_CONFIGS[args['task_name']]['dataset_dir']
+        dataset_name = os.path.basename(os.path.normpath(dataset_dir))
+        args['ckpt_dir'] = str(DEFAULT_CKPT_DIR / f'{dataset_name}_resumable')
     resume_path = os.path.join(args['ckpt_dir'], 'training_state.ckpt')
     if resume and not os.path.isfile(resume_path):
         raise FileNotFoundError(f'No resume checkpoint found: {resume_path}')
@@ -148,17 +150,17 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--ckpt_dir', required=True)
-    parser.add_argument('--policy_class', required=True)
-    parser.add_argument('--task_name', required=True)
-    parser.add_argument('--batch_size', type=int, required=True)
-    parser.add_argument('--seed', type=int, required=True)
-    parser.add_argument('--num_epochs', type=int, required=True)
-    parser.add_argument('--lr', type=float, required=True)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--ckpt_dir', default=None, help='checkpoint directory; default is based on the dataset name')
+    parser.add_argument('--policy_class', default='ACT')
+    parser.add_argument('--task_name', default='scara_default', choices=TASK_CONFIGS)
+    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--num_epochs', type=int, default=2000)
+    parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--kl_weight', type=int)
-    parser.add_argument('--chunk_size', type=int)
-    parser.add_argument('--hidden_dim', type=int)
-    parser.add_argument('--dim_feedforward', type=int)
+    parser.add_argument('--kl_weight', type=int, default=10)
+    parser.add_argument('--chunk_size', type=int, default=30)
+    parser.add_argument('--hidden_dim', type=int, default=512)
+    parser.add_argument('--dim_feedforward', type=int, default=3200)
     main(vars(parser.parse_args()))

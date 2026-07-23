@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from tqdm import tqdm
 
-from constants import ACT_STATE_DIM, TASK_CONFIGS
+from constants import ACT_STATE_DIM, DEFAULT_CKPT_DIR, TASK_CONFIGS
 from utils import load_data # data functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
@@ -18,7 +18,6 @@ e = IPython.embed
 def main(args):
     set_seed(1)
     # command line parameters
-    ckpt_dir = args['ckpt_dir']
     policy_class = args['policy_class']
     task_name = args['task_name']
     batch_size_train = args['batch_size']
@@ -30,6 +29,7 @@ def main(args):
     dataset_dir = task_config["dataset_dir"]
     num_episodes = task_config["num_episodes"]
     camera_names = task_config["camera_names"]
+    ckpt_dir = args['ckpt_dir'] or str(DEFAULT_CKPT_DIR / os.path.basename(os.path.normpath(dataset_dir)))
 
     # fixed parameters
     state_dim = ACT_STATE_DIM
@@ -213,19 +213,19 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--ckpt_dir', action='store', type=str, help='ckpt_dir', required=True)
-    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
-    parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
-    parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
-    parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
-    parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
-    parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--ckpt_dir', default=None, help='checkpoint directory; default is based on the dataset name')
+    parser.add_argument('--policy_class', default='ACT')
+    parser.add_argument('--task_name', default='scara_default', choices=TASK_CONFIGS)
+    parser.add_argument('--batch_size', type=int, default=8)
+    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--num_epochs', type=int, default=2000)
+    parser.add_argument('--lr', type=float, default=1e-5)
 
     # for ACT
-    parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
-    parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
-    parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
-    parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
+    parser.add_argument('--kl_weight', type=int, default=10)
+    parser.add_argument('--chunk_size', type=int, default=30)
+    parser.add_argument('--hidden_dim', type=int, default=512)
+    parser.add_argument('--dim_feedforward', type=int, default=3200)
     
     main(vars(parser.parse_args()))
