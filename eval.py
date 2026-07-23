@@ -19,7 +19,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt-dir", type=Path, required=True)
     parser.add_argument("--checkpoint", default="policy_best.ckpt")
-    parser.add_argument("--chunks", type=int, default=10, help="number of observations/predicted chunks")
+    parser.add_argument("--chunks", type=int, default=1000, help="number of observations/predicted chunks")
     parser.add_argument("--start-action", type=int, default=0, help="first action index sent from every chunk")
     parser.add_argument("--hz", type=float, default=30)
     parser.add_argument("--device", default="cuda")
@@ -27,8 +27,10 @@ def main():
     parser.add_argument("--port", type=int, default=10100)
     parser.add_argument("--serial", default="130322273198")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--no-viewer", action="store_true")
+    parser.add_argument("--no-camera-view", action="store_true")
     parser.add_argument("--profile", type=int, default=2)
-    parser.add_argument("--mspeed", type=int, default=20)
+    parser.add_argument("--mspeed", type=int, default=100)
     parser.add_argument("--profile-speed", type=int, default=20)
     parser.add_argument("--profile-accel", type=int, default=20)
     parser.add_argument("--profile-ramp", type=float, default=0.08)
@@ -57,9 +59,13 @@ def main():
     camera_name = config["camera_names"][0]
     camera = RealSenseSource(color_name=camera_name, serial=args.serial)
     robot = None
+    viewer = None
 
     try:
         camera.start()
+        if not args.no_viewer:
+            from live_viewer import LiveViewer
+            viewer = LiveViewer(show_camera=not args.no_camera_view)
         if args.execute:
             robot = TCSMotionClient(host=args.host, port=args.port, profile=args.profile, mspeed=args.mspeed, profile_speed=args.profile_speed, profile_accel=args.profile_accel, profile_ramp=args.profile_ramp, profile_straight=args.profile_straight, set_tool=False)
         else:
@@ -67,13 +73,15 @@ def main():
 
         for chunk_number in range(args.chunks):
             sample = camera.read()
-            image = torch.from_numpy(sample["frames"][camera_name]).permute(2, 0, 1)[None, None].float().to(device) / 255
-            qpos = joint_dict_to_vector(robot.get_joint_state())
-            qpos = torch.from_numpy((qpos - qpos_mean) / qpos_std)[None].float().to(device)
+            camera_image = sample["frames"][camera_name]
+            image = torch.from_numpy(camera_image).permute(2, 0, 1)[None, None].float().to(device) / 255
+            current_q = joint_dict_to_vector(robot.get_joint_state())
+            qpos = torch.from_numpy((current_q - qpos_mean) / qpos_std)[None].float().to(device)
 
             with torch.inference_mode(): actions = policy(qpos, image)[0].cpu().numpy()
             actions = actions * action_std + action_mean
             actions = actions[args.start_action:]
+            if viewer is not None: viewer.update(camera_image, current_q, actions, chunk_number + 1)
             print(f"chunk {chunk_number + 1}/{args.chunks}: sending {len(actions)} actions from index {args.start_action} at {args.hz:g} Hz")
 
             for action in actions:
@@ -86,6 +94,7 @@ def main():
         if args.execute and robot is not None:
             try: robot.halt()
             except Exception: pass
+        if viewer is not None: viewer.close()
         camera.close()
         if robot is not None: robot.close()
 

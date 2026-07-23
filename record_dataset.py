@@ -205,7 +205,7 @@ def save_episode(episode, dataset_dir):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--dataset-dir", type=Path, default=Path("datasets/default"))
+    parser.add_argument("--dataset-dir", type=Path, default=Path("datasets/leaf_cutting_experiment_rgb_640x480"))
     parser.add_argument("--host", default="192.168.0.10")
     parser.add_argument("--port", type=int, default=10100)
     parser.add_argument("--camera-name", default="wrist_d405")
