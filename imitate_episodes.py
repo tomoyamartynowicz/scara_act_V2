@@ -6,8 +6,9 @@ import argparse
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from tqdm import tqdm
+from pathlib import Path
 
-from constants import ACT_STATE_DIM, DEFAULT_CKPT_DIR, TASK_CONFIGS
+from constants import ACT_STATE_DIM, TASK_CONFIGS
 from utils import load_data # data functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
@@ -26,10 +27,11 @@ def main(args):
 
     # get task parameters
     task_config = TASK_CONFIGS[task_name]
-    dataset_dir = task_config["dataset_dir"]
-    num_episodes = task_config["num_episodes"]
+    dataset_dir = args["dataset_dir"]
+    ckpt_dir = args["ckpt_dir"]
     camera_names = task_config["camera_names"]
-    ckpt_dir = args['ckpt_dir'] or str(DEFAULT_CKPT_DIR / os.path.basename(os.path.normpath(dataset_dir)))
+    episode_files = glob.glob(os.path.join(dataset_dir, "episode_*.hdf5"))
+    num_episodes = len(episode_files)
 
     # fixed parameters
     state_dim = ACT_STATE_DIM
@@ -59,6 +61,8 @@ def main(args):
         raise NotImplementedError
 
     config = {
+        'dataset_dir': dataset_dir,
+        'num_episodes': num_episodes,
         'num_epochs': num_epochs,
         'ckpt_dir': ckpt_dir,
         'state_dim': state_dim,
@@ -214,7 +218,8 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--ckpt_dir', default=None, help='checkpoint directory; default is based on the dataset name')
+    parser.add_argument("--dataset_dir", required=True)
+    parser.add_argument('--ckpt_dir', required=True)
     parser.add_argument('--policy_class', default='ACT')
     parser.add_argument('--task_name', default='scara_default', choices=TASK_CONFIGS)
     parser.add_argument('--batch_size', type=int, default=8)

@@ -1,10 +1,6 @@
 from pathlib import Path
 
 
-PACKAGE_DIR = Path(__file__).resolve().parent
-DEFAULT_DATASET_DIR = PACKAGE_DIR / "datasets"
-DEFAULT_CKPT_DIR = PACKAGE_DIR / "checkpoints"
-
 JOINT_NAMES = ("J1", "J2", "J3", "J4")
 ACT_STATE_DIM = len(JOINT_NAMES)
 
@@ -24,8 +20,6 @@ DEFAULT_JOINT_TARGET = {
 
 TASK_CONFIGS = {
     "scara_default": {
-        "dataset_dir": str(DEFAULT_DATASET_DIR / "leaf_cutting_experiment_rgb_640x480"),
-        "num_episodes": 306,
         "camera_names": ["wrist_d405"],
     },
 }
