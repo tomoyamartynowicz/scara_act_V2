@@ -3,7 +3,6 @@
 !*/
 !*.py
 !.gitignore
-!*.slurm
 
 # Keep generated, local, and large artifacts out of Git.
 __pycache__/

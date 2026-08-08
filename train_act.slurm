@@ -2,22 +2,36 @@
 
 #SBATCH --job-name=act_leaf_rgb
 #SBATCH --partition=gpu
-#SBATCH --time=1:00:00
+#SBATCH --time=01:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=4
 #SBATCH --gpus-per-task=1
-#SBATCH --mem-per-cpu=8G
-#SBATCH --output=/scratch/thesis/runs/act/leaf_rgb_act_v1/slurm-%j.out
-#SBATCH --account=education+
+#SBATCH --mem-per-cpu=5G
+#SBATCH --account=education-ME-msc-ro
 
-module load 2024r1
-module load openmpi
-module load py-torch
+set -euo pipefail
+
+module purge
+module load slurm
+
+export PATH="$HOME/.pixi/bin:$PATH"
+
+PIXI_PROJECT="/scratch/$USER/thesis/envs/act"
+DATASET_DIR="/scratch/$USER/thesis/datasets/leaf_cutting_experiment_rgb"
+CKPT_DIR="/scratch/$USER/thesis/runs/act/leaf_rgb_act_v1"
+
+mkdir -p "$CKPT_DIR"
 
 cd "$HOME/scara_ws/src/scara_act"
 
-srun python -u imitate_episodes_resume.py \
-  --dataset_dir /scratch/thesis/datasets/leaf_cutting_experiment_rgb \
-  --ckpt_dir /scratch/thesis/runs/act/leaf_rgb_act_v1 \
-  --num_epochs 2000 \
+echo "Node: $(hostname)"
+echo "Dataset: $DATASET_DIR"
+echo "Checkpoint dir: $CKPT_DIR"
+
+srun pixi run \
+  --manifest-path "$PIXI_PROJECT/pixi.toml" \
+  python -u imitate_episodes_resume.py \
+  --dataset_dir "$DATASET_DIR" \
+  --ckpt_dir "$CKPT_DIR" \
+  --num_epochs 100 \
   --batch_size 8

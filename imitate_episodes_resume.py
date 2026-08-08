@@ -8,7 +8,7 @@ import torch
 from tqdm import tqdm
 
 import imitate_episodes as original
-from constants import DEFAULT_CKPT_DIR, TASK_CONFIGS
+from constants import TASK_CONFIGS
 
 
 def detach_cpu(values):
@@ -138,10 +138,6 @@ def main(args):
     resume = args.pop('resume')
     if '--resume' in sys.argv:
         sys.argv.remove('--resume')
-    if args['ckpt_dir'] is None:
-        dataset_dir = TASK_CONFIGS[args['task_name']]['dataset_dir']
-        dataset_name = os.path.basename(os.path.normpath(dataset_dir))
-        args['ckpt_dir'] = str(DEFAULT_CKPT_DIR / f'{dataset_name}_resumable')
     resume_path = os.path.join(args['ckpt_dir'], 'training_state.ckpt')
     if resume and not os.path.isfile(resume_path):
         raise FileNotFoundError(f'No resume checkpoint found: {resume_path}')
@@ -151,7 +147,8 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--ckpt_dir', default=None, help='checkpoint directory; default is based on the dataset name')
+    parser.add_argument("--dataset_dir", required=True)
+    parser.add_argument("--ckpt_dir", required=True)
     parser.add_argument('--policy_class', default='ACT')
     parser.add_argument('--task_name', default='scara_default', choices=TASK_CONFIGS)
     parser.add_argument('--batch_size', type=int, default=8)
