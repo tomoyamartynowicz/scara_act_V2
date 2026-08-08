@@ -30,8 +30,7 @@ def main(args):
     dataset_dir = args["dataset_dir"]
     ckpt_dir = args["ckpt_dir"]
     camera_names = task_config["camera_names"]
-    episode_files = glob.glob(os.path.join(dataset_dir, "episode_*.hdf5"))
-    num_episodes = len(episode_files)
+    num_episodes = len(list(Path(dataset_dir).glob("episode_*.hdf5")))
 
     # fixed parameters
     state_dim = ACT_STATE_DIM
