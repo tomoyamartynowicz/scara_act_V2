@@ -4,6 +4,7 @@ import os
 import pickle
 import argparse
 import matplotlib.pyplot as plt
+import time
 from copy import deepcopy
 from tqdm import tqdm
 from pathlib import Path
@@ -139,6 +140,10 @@ def train_bc(train_dataloader, val_dataloader, config):
     min_val_loss = np.inf
     best_ckpt_info = None
     for epoch in tqdm(range(num_epochs)):
+        ## Monitor GPU-memory annd timing
+        torch.cuda.reset_peak_memory_stats()
+        epoch_start = time.time()
+
         print(f'\nEpoch {epoch}')
         # validation
         with torch.inference_mode():
@@ -178,6 +183,14 @@ def train_bc(train_dataloader, val_dataloader, config):
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
         print(summary_string)
+
+        ## Monitor GPU-memory annd timing
+        epoch_time = time.time() - epoch_start
+        peak_mem_gb = torch.cuda.max_memory_allocated() / 1024**3
+
+        print(f"Epoch {epoch} performance: "
+              f"time={epoch_time:.2f}s, "
+              f"peak_gpu_mem={peak_mem_gb:.2f} GB")
 
         if epoch % 100 == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
