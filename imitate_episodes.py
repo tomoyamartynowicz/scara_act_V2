@@ -77,6 +77,15 @@ def main(args):
     # dataset chunk_size == ACT num_queries
     train_dataloader, val_dataloader, stats = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, policy_config["num_queries"])
 
+    print("===================================")
+    print(f"Train samples : {len(train_dataloader.dataset)}")
+    print(f"Val samples   : {len(val_dataloader.dataset)}")
+    print(f"Train batches : {len(train_dataloader)}")
+    print(f"Val batches   : {len(val_dataloader)}")
+    print(f"Batch size    : {batch_size_train}")
+    print(f"Num workers   : {train_dataloader.num_workers}")
+    print("===================================")
+
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
         os.makedirs(ckpt_dir)
@@ -118,7 +127,12 @@ def make_optimizer(policy_class, policy):
 
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
+
+    ## recommended non_blocking=True when pin_memory=True ref Pytorch
+    image_data = image_data.cuda(non_blocking=True)
+    qpos_data = qpos_data.cuda(non_blocking=True)
+    action_data = action_data.cuda(non_blocking=True)
+    is_pad = is_pad.cuda(non_blocking=True)
     return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
 
 
@@ -141,8 +155,8 @@ def train_bc(train_dataloader, val_dataloader, config):
     best_ckpt_info = None
     for epoch in tqdm(range(num_epochs)):
         ## Monitor GPU-memory annd timing
-        torch.cuda.reset_peak_memory_stats()
-        epoch_start = time.time()
+        torch.cuda.synchronize()
+        epoch_start = time.perf_counter()
 
         print(f'\nEpoch {epoch}')
         # validation
@@ -164,6 +178,8 @@ def train_bc(train_dataloader, val_dataloader, config):
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
         print(summary_string)
+        torch.cuda.synchronize()
+        val_end = time.perf_counter()
 
         # training
         policy.train()
@@ -183,14 +199,22 @@ def train_bc(train_dataloader, val_dataloader, config):
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
         print(summary_string)
+        torch.cuda.synchronize()
+        epoch_end = time.perf_counter()
 
         ## Monitor GPU-memory annd timing
-        epoch_time = time.time() - epoch_start
+        val_time = val_end - epoch_start
+        train_time = epoch_end - val_end
+        epoch_time = epoch_end - epoch_start
         peak_mem_gb = torch.cuda.max_memory_allocated() / 1024**3
 
-        print(f"Epoch {epoch} performance: "
-              f"time={epoch_time:.2f}s, "
-              f"peak_gpu_mem={peak_mem_gb:.2f} GB")
+        print(
+            f"Epoch {epoch} performance: "
+            f"total={epoch_time:.2f}s, "
+            f"train={train_time:.2f}s, "
+            f"val={val_time:.2f}s, "
+            f"peak_gpu_mem={peak_mem_gb:.2f} GB"
+        )
 
         if epoch % 100 == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
